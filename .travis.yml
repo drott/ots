@@ -33,6 +33,7 @@ install:
 script:
   - ./configure --enable-debug --prefix=$PWD/dist
   - export OTS_VERSION=$(grep PACKAGE_VERSION config.h | cut -d'"' -f2)
+  - export LSAN_OPTIONS=verbosity=1:log_threads=1
   - make distcheck || (cat `find -name '*.log'` && false)
   - make install-strip
   - make dist
