@@ -17,7 +17,7 @@ class OpenTypeMAXP;
 class OpenTypeGLYF : public Table {
  public:
   explicit OpenTypeGLYF(Font *font, uint32_t tag)
-      : Table(font, tag, tag), maxp(NULL) { }
+      : Table(font, tag, tag), maxp(NULL), maxp_tracking({0,0,0}) { }
 
   bool Parse(const uint8_t *data, size_t length);
   bool Serialize(OTSStream *out);
@@ -50,6 +50,12 @@ class OpenTypeGLYF : public Table {
       ComponentPointCount* component_point_count);
 
   OpenTypeMAXP* maxp;
+
+  struct {
+    uint16_t new_max_points;
+    uint16_t new_max_c_points;
+    uint16_t new_max_c_depth;
+  } maxp_tracking;
 
   std::vector<std::pair<const uint8_t*, size_t> > iov;
 };

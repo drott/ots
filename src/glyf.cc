@@ -99,9 +99,8 @@ bool OpenTypeGLYF::ParseSimpleGlyph(Buffer &glyph,
     num_flags = tmp_index + 1;
   }
 
-  if (num_flags > this->maxp->max_points) {
-    Warning("Number of contour points exceeds maxp maxPoints, adjusting limit.");
-    this->maxp->max_points = num_flags;
+  if (num_flags > this->maxp_tracking.new_max_points) {
+    this->maxp_tracking.new_max_points = num_flags;
   }
 
   uint16_t bytecode_length = 0;
@@ -364,14 +363,8 @@ bool OpenTypeGLYF::Parse(const uint8_t *data, size_t length) {
           return Error("Illegal composite points value "
                        "exceeding 0xFFFF for base glyph %d.", i);
         } else if (component_point_count.accumulated_component_points >
-                   this->maxp->max_c_points) {
-          Warning("Number of composite points in glyph %d exceeds "
-                  "maxp maxCompositePoints: %d vs %d, adjusting limit.",
-                  i,
-                  component_point_count.accumulated_component_points,
-                  this->maxp->max_c_points
-                  );
-          this->maxp->max_c_points =
+                   this->maxp_tracking.new_max_c_points) {
+          this->maxp_tracking.new_max_c_points =
               component_point_count.accumulated_component_points;
         }
       }
@@ -411,6 +404,34 @@ bool OpenTypeGLYF::Parse(const uint8_t *data, size_t length) {
     this->iov.push_back(std::make_pair(&kZero, 1));
   }
 
+  // Adjust maxp values according to findings during glyph traveral,
+  // code during glyph traversal rejects the font if values become
+  // larger than 0xFFFF.
+  if (this->maxp_tracking.new_max_points != this->maxp->max_points) {
+    Warning("Inaccurate maxPoints value in max table, "
+            "adjusting value from %d to %d.",
+            this->maxp->max_points,
+            this->maxp_tracking.new_max_points);
+    this->maxp->max_points = this->maxp_tracking.new_max_points;
+  }
+
+
+  if (this->maxp_tracking.new_max_c_points != this->maxp->max_c_points) {
+    Warning("Inaccurate maxCompositePoints value in maxp table, "
+            "adjusting value from %d to %d.",
+            this->maxp->max_c_points,
+            this->maxp_tracking.new_max_c_points);
+    this->maxp->max_c_points = this->maxp_tracking.new_max_c_points;
+  }
+
+  if (this->maxp_tracking.new_max_c_depth != this->maxp->max_c_depth) {
+    Warning("Inaccurate maxComponentDepth value in maxp table, "
+            "adjusting value from %d to %d.",
+            this->maxp->max_c_depth,
+            this->maxp_tracking.new_max_c_depth);
+    this->maxp->max_c_depth = this->maxp_tracking.new_max_c_depth;
+  }
+
   return true;
 }
 
@@ -434,17 +455,12 @@ bool OpenTypeGLYF::TraverseComponentsCountingPoints(
     return true;
 
   // FontTools counts a component level for each traversed recursion. We start
-  // counting at level 0. If we reach a level that's deeper than
-  // maxComponentDepth, we expand maxComponentDepth unless it's larger than
-  // the maximum possible depth.
+  // counting at level 0.
   if (level > std::numeric_limits<uint16_t>::max()) {
     return Error("Illegal component depth exceeding 0xFFFF in base glyph id %d.",
                  base_glyph_id);
-  } else if (level > this->maxp->max_c_depth) {
-    this->maxp->max_c_depth = level;
-    Warning("Component depth exceeds maxp maxComponentDepth "
-            "in glyph %d, adjust limit to %d.",
-            base_glyph_id, level);
+  } else if (level > this->maxp_tracking.new_max_c_depth) {
+    this->maxp_tracking.new_max_c_depth = level;
   }
 
   if (num_contours > 0) {
